@@ -12,7 +12,7 @@ unset jamfProURL apiUser apiPass dryRun downloadScripts downloadEAs pushChangesT
 function finish() {
 
     # Expire the Bearer Token
-    [[ -n "$apiToken" ]] && curl -s -H "Authorization: Bearer $apiToken" "$jamfProURL/uapi/auth/invalidateToken" -X POST
+    [[ -n "$apiToken" ]] && curl -w "%{http_code}" -H "Authorization: Bearer ${apiToken}" $jamfProURL/api/v1/auth/invalidate-token -X POST -s -o /dev/null
 
     rm "$scriptSummariesFile" 2>/dev/null
     rm "$eaSummariesFile" 2>/dev/null
@@ -28,7 +28,9 @@ function get_jamf_pro_api_token() {
     [[ "$healthCheckHttpCode" != "200" ]] && echo "Unable to contact the Jamf Pro server; exiting" && exit 1
 
     # Attempt to obtain the token
-    apiToken=$(curl -s -u "$apiUser:$apiPass" "$jamfProURL/api/v1/auth/token" -X POST 2>/dev/null | jq -r '.token | select(.!=null)')
+    response=$(curl --silent --location --request POST "$jamfProURL/api/oauth/token" --header "Content-Type: application/x-www-form-urlencoded" --data-urlencode "client_id=${apiUser}" --data-urlencode "grant_type=client_credentials" --data-urlencode "client_secret=${apiPass}")
+    apiToken=$(echo "$response" | jq -r '.access_token')
+    tokenExpiration=$(echo "$response" | jq -r '.expires_in')
     [[ -z "$apiToken" ]] && echo "Unable to obtain a Jamf Pro API Bearer Token; exiting" && exit 2
 
     # Validate the token
